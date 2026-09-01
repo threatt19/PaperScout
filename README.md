@@ -2,7 +2,7 @@
 
 **PaperScout: An Autonomous Agent for Academic Paper Search with Process-Aware Sequence-Level Policy Optimization**
 
-[Project Page](https://agentr1.github.io/paperscout/) | [Paper](https://arxiv.org/pdf/2601.10029) | Accepted to <span style="color:red"><strong>Findings of EMNLP 2026</strong></span>!
+[Project Page](https://agentr1.github.io/paperscout/) | [Paper](https://arxiv.org/pdf/2601.10029) | [Website](https://lewen.bdaa.pro/)
 
 PaperScout is an autonomous LLM-based agent for academic paper search. Instead of treating retrieval as a one-shot ranking problem or a fixed search-then-expand workflow, PaperScout formulates paper search as a multi-turn decision-making process: at each step, the agent decides whether, when, and how to call `Search` and `Expand` tools according to the papers retrieved so far.
 
