@@ -10,8 +10,8 @@ To train this kind of multi-turn retrieval agent, we introduce **Proximal Sequen
 
 ## News
 
-- PaperScout has been accepted to Findings of EMNLP 2026.
-- Code is available at <https://github.com/AgentR1/PaperScout>.
+- 🎉 PaperScout has been accepted to Findings of EMNLP 2026.
+- 🚀 Code is available at <https://github.com/AgentR1/PaperScout>.
 
 ## Overview
 
