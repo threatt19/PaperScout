@@ -128,17 +128,9 @@ The default agent-flow config uses up to 5 interaction steps and up to 5 paralle
   max_parallel_calls: 5
 ```
 
-## Key Contributions
-
-- We propose PaperScout, an autonomous paper search agent that adaptively controls search and reference expansion based on accumulated retrieval context.
-- We introduce PSPO, a process-aware, sequence-level policy optimization method aligned with multi-turn agent interactions.
-- Experiments on synthetic and real-world benchmarks show that PSPO improves retrieval effectiveness, tool-call efficiency, and optimization stability.
-
-## Limitations
-
-PaperScout currently depends on publicly accessible papers from online search engines and open repositories. Coverage may be limited for restricted or paywalled sources. Citation expansion currently focuses on outgoing references; incoming citations and richer citation graph signals are natural directions for future improvement.
-
 ## Citation
+
+If you are interested in our work, please feel free to contact us for discussion and collaboration!
 
 ```bibtex
 @inproceedings{pan2026paperscout,
