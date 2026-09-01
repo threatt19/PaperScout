@@ -130,7 +130,7 @@ The default agent-flow config uses up to 5 interaction steps and up to 5 paralle
 
 ## Citation
 
-If you are interested in our work, please feel free to contact us for discussion and collaboration!
+If you are interested in our work, please don't hesitate to contact us for discussion and collaboration!
 
 ```bibtex
 @inproceedings{pan2026paperscout,
