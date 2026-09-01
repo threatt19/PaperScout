@@ -15,25 +15,25 @@ To train this kind of multi-turn retrieval agent, we introduce **Proximal Sequen
 
 ## Overview
 
-Academic paper search often requires conditional and exploratory behavior. For example, a user may want papers that apply reinforcement learning to protein folding while excluding Transformer-based architectures. Static semantic matching can return papers that are topically similar but constraint-violating, while fixed workflows cannot flexibly decide when to broaden search, deepen citation expansion, or redirect exploration.
+Academic paper search often requires **conditional and exploratory behavior**. For example, a user may want papers that apply reinforcement learning to protein folding while excluding Transformer-based architectures. Static semantic matching can return papers that are topically similar but constraint-violating, while fixed workflows cannot flexibly decide **when to broaden search, deepen citation expansion, or redirect exploration**.
 
-PaperScout addresses this by maintaining a paper pool as its latent search state. At each interaction step, the agent observes a compact summary of the pool and the action history, then emits tool calls:
+PaperScout addresses this by maintaining a **paper pool** as its latent search state. At each interaction step, the agent observes a compact summary of the pool and the action history, then emits tool calls:
 
 - `Search(query)`: calls scholarly search APIs to retrieve new candidate papers.
 - `Expand(paper)`: follows references from an existing paper to discover related papers.
 
-Retrieved papers are scored for relevance, filtered, and merged into the pool. This lets the search strategy evolve over multiple turns rather than following a predefined retrieval pipeline.
+Retrieved papers are scored for relevance, filtered, and merged into the pool. This lets the **search strategy evolve over multiple turns** rather than following a predefined retrieval pipeline.
 
 <img width="1659" height="634" alt="PaperScout framework" src="https://github.com/user-attachments/assets/087f7fe6-0cd8-4703-95ec-def587d97f10" />
 
 ## Why PSPO?
 
-Standard RL methods are not naturally aligned with multi-turn agentic retrieval:
+Standard RL methods are not naturally aligned with **multi-turn agentic retrieval**:
 
-- Token-level PPO assigns turn-level feedback across many individual tokens, producing noisy credit assignment.
-- Outcome-oriented methods such as GRPO optimize mostly from final outcomes and do not naturally use intermediate retrieval gains.
+- **Token-level PPO** assigns turn-level feedback across many individual tokens, producing noisy credit assignment.
+- **Outcome-oriented methods** such as GRPO optimize mostly from final outcomes and do not naturally use intermediate retrieval gains.
 
-PSPO instead treats each complete agent response as the atomic action. It estimates advantages at the sequence level and uses process rewards from intermediate search steps through a learned critic. This matches the granularity of agent-environment interaction and improves training stability.
+PSPO instead treats **each complete agent response as the atomic action**. It estimates advantages at the **sequence level** and uses **process rewards** from intermediate search steps through a learned critic. This matches the granularity of agent-environment interaction and improves training stability.
 
 <img width="1782" height="658" alt="PSPO sequence-level optimization" src="https://github.com/user-attachments/assets/1cf52ad6-5497-4b07-86aa-733b3722af76" />
 
