@@ -1,0 +1,85 @@
+#!/bin/bash
+set -x
+
+export CUDA_VISIBLE_DEVICES=0
+export VLLM_USE_V1=1
+export HF_ENDPOINT=https://hf-mirror.com
+export CUDA_HOME="$CONDA_PREFIX"
+export HYDRA_FULL_ERROR=1
+
+PROJECT_DIR="$(pwd)"
+CONFIG_PATH="$PROJECT_DIR/recipe/paper_search/base_smoke.yaml"
+
+ACTOR_MODEL="$HOME/models/Qwen3-0.6B"
+RM_MODEL="$HOME/models/pasa-7b-selector"
+
+python3 -m arft.main_agent_ppo \
+    algorithm.adv_estimator=gae \
+    data.train_files=$HOME/data/pasa/train_smoke.parquet \
+    data.val_files=$HOME/data/pasa/test.parquet \
+    data.train_batch_size=2 \
+    data.max_prompt_length=5120 \
+    data.max_response_length=1024 \
+    data.filter_overlong_prompts=True \
+    data.truncation='error' \
+    data.return_raw_chat=True \
+    +data.apply_chat_template_kwargs.enable_thinking=False \
+    actor_rollout_ref.model.path=$ACTOR_MODEL \
+    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.actor.ppo_mini_batch_size=1 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.ppo_epochs=1 \
+    actor_rollout_ref.actor.use_kl_loss=True \
+    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.clip_ratio_low=3e-4 \
+    actor_rollout_ref.actor.clip_ratio_high=4e-4 \
+    actor_rollout_ref.actor.clip_ratio_c=10.0 \
+    actor_rollout_ref.actor.policy_loss.loss_mode=gspo \
+    actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.actor.fsdp_config.param_offload=True \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.30 \
+    actor_rollout_ref.rollout.max_model_len=6144 \
+    actor_rollout_ref.rollout.max_num_seqs=4 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=2048 \
+    actor_rollout_ref.rollout.agent.agent_flow_config_path=$CONFIG_PATH \
+    actor_rollout_ref.rollout.agent.num_workers=1 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    reward_model.enable=False \
+    reward_model.model.path=$RM_MODEL \
+    reward_model.rollout.name=vllm \
+    reward_model.rollout.tensor_model_parallel_size=1 \
+    reward_model.rollout.gpu_memory_utilization=0.63 \
+    reward_model.rollout.free_cache_engine=True \
+    reward_model.rollout.max_model_len=3072 \
+    reward_model.rollout.max_num_batched_tokens=2048 \
+    reward_model.rollout.max_num_seqs=4 \
+    critic.model.path=$ACTOR_MODEL \
+    critic.optim.lr=1e-5 \
+    critic.model.use_remove_padding=True \
+    critic.model.enable_gradient_checkpointing=True \
+    critic.ppo_mini_batch_size=1 \
+    critic.ppo_micro_batch_size_per_gpu=1 \
+    critic.model.fsdp_config.param_offload=True \
+    critic.model.fsdp_config.optimizer_offload=True \
+    critic.model.fsdp_config.model_dtype=bfloat16 \
+    algorithm.use_kl_in_reward=False \
+    trainer.critic_warmup=1 \
+    trainer.logger='["console"]' \
+    trainer.project_name='paperscout-smoke' \
+    trainer.experiment_name='qwen3-0.6b-4090' \
+    trainer.n_gpus_per_node=1 \
+    trainer.nnodes=1 \
+    trainer.val_before_train=False \
+    trainer.save_freq=-1 \
+    trainer.test_freq=-1 \
+    trainer.total_training_steps=5 \
+    trainer.total_epochs=1 \
+    trainer.resume_mode=disable

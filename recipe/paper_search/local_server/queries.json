@@ -1,0 +1,12 @@
+[
+  "Which references can provide information about Sparse Coding?",
+  "What study developed Sparse Inertial Poser for offline joint angle reconstruction?",
+  "Which studies focused on the use of Mask Transformers for image segmentation?",
+  "Which works take inspiration from human mesh recovery and use the MANO parametric hand model?",
+  "Can you identify the works that reported the use of Stable Diffusion as the 2D prior and viewpoint-conditioned diffusion model in generating 3D content from a given image?",
+  "Can you provide me with paper that explains how BYOL prevents representation collapse?",
+  "Which paper first introduced the application of diffusion models to continuous text space?",
+  "What papers attempted to solve the Bayesian exploration POMDP in the context of meta-reinforcement learning?",
+  "Which papers focus on initializing a replay buffer with offline data?",
+  "What works have applied the CUT Loss to StyleGAN and Diffusion models for image translation and style transfer?"
+]

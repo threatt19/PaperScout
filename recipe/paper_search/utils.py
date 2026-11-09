@@ -1,5 +1,4 @@
 import asyncio
-import pickle
 from functools import total_ordering
 from typing import Any, Optional
 
@@ -9,10 +8,7 @@ from sortedcontainers import SortedList
 
 from .http_retry import httpx_request_with_retry
 
-ZIP_INDEX_DICT = {
-    "warning": pickle.load(open("/data/tingyue/workspace/oyj/arxiv_database/id2paper_warning.pkl", "rb")),
-    "no_problem": pickle.load(open("/data/tingyue/workspace/oyj/arxiv_database/id2paper_no_problem.pkl", "rb")),
-}
+
 
 
 class Paper(BaseModel):
@@ -199,16 +195,18 @@ class PaperPool:
         self.threshold = threshold
         self.max_abstract_words = max_abstract_words
 
-        self.exist_local_papers = set()
-        for zip_name, zip_index in ZIP_INDEX_DICT.items():
-            self.exist_local_papers.update(zip_index.keys())
+        self.exist_local_papers = None
+
 
     def add_paper(self, paper: Paper, source: str, origin: str, score: float):
         if paper.arxiv_id in self.papers:
             return
 
         arxiv_id = paper.arxiv_id.split("v")[0]
-        exist_local = True if arxiv_id in self.exist_local_papers else False
+
+        # In the small-pool reproduction, every paper returned by the
+        # local retrieval server belongs to our local corpus.
+        exist_local = True
 
         paper_pool_entry = PaperPoolEntry(
             paper=paper, source=source, origin=origin, score=score, exist_local=exist_local

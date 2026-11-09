@@ -22,6 +22,10 @@ from uuid import uuid4
 
 from transformers import AutoProcessor, AutoTokenizer
 
+import re
+
+from rank_bm25 import BM25Okapi
+
 from arft.agent_flow.agent_flow import AgentFlowBase, AgentFlowOutput, AgentFlowStep, register
 from arft.reward_loop import ARFTRewardLoopWorker as RewardLoopWorker
 from recipe.paper_search.prompts import *
@@ -188,6 +192,7 @@ class PaperSearchAgentFlow(AgentFlowBase):
                 output = await self.server_manager.generate(
                     request_id=uuid4().hex, prompt_ids=prompt_ids, sampling_params=sampling_params
                 )
+
             response_ids = output.token_ids[: self.response_length]
             _, tool_calls = await self.tool_parser.extract_tool_calls(response_ids)
 
@@ -266,23 +271,27 @@ class PaperSearchAgentFlow(AgentFlowBase):
             print(f"Error in search {query}: str={str(e)}, type={type(e).__name__}, repr={repr(e)}")
             self.history_search_queries[query] = 0
             return 0.0
+
         new_papers = []
-        tasks = []
         seen_base_ids: set[str] = set()
+
         for paper in papers:
             base_id = self._normalize_arxiv_id(paper.arxiv_id)
-            # Dedup within this batch (e.g., v1/v2 variants or repeated results).
             if base_id in seen_base_ids:
                 continue
             seen_base_ids.add(base_id)
+
             with self._paper_pool_lock:
                 if self.paper_pool.has_paper(base_id):
                     continue
 
             paper_norm = self._copy_paper_with_arxiv_id(paper, base_id)
             new_papers.append(paper_norm)
-            tasks.append(self.get_relevance_score(self.user_query, paper_norm, **kwargs))
-        relevance_scores = await asyncio.gather(*tasks)
+
+        relevance_scores = self.get_bm25_relevance_scores(
+            self.user_query,
+            new_papers,
+        )
 
         keeped_papers, keeped_scores = [], []
         for paper, score in zip(new_papers, relevance_scores):
@@ -359,20 +368,25 @@ class PaperSearchAgentFlow(AgentFlowBase):
         expand_papers = [p for papers in lookup_results for p in papers]
 
         new_papers = []
-        tasks = []
         seen_base_ids: set[str] = set()
+
         for paper in expand_papers:
             base_pid = self._normalize_arxiv_id(paper.arxiv_id)
             if base_pid in seen_base_ids:
                 continue
             seen_base_ids.add(base_pid)
+
             with self._paper_pool_lock:
                 if self.paper_pool.has_paper(base_pid):
                     continue
+
             paper_norm = self._copy_paper_with_arxiv_id(paper, base_pid)
             new_papers.append(paper_norm)
-            tasks.append(self.get_relevance_score(self.user_query, paper_norm, **kwargs))
-        relevance_scores = await asyncio.gather(*tasks)
+
+        relevance_scores = self.get_bm25_relevance_scores(
+            self.user_query,
+            new_papers,
+        )
 
         keeped_papers, keeped_scores = [], []
         for paper, score in zip(new_papers, relevance_scores):
@@ -395,6 +409,39 @@ class PaperSearchAgentFlow(AgentFlowBase):
             top_k_scores = [1.0 if score >= self.reward_threshold else 0.0 for score in top_k_scores]
         reward_score = sum(top_k_scores) - self.expand_cost
         return reward_score
+
+    def _tokenize_bm25(self, text: str) -> list[str]:
+        """Simple tokenizer for English paper titles/abstracts."""
+        return re.findall(r"\b[a-zA-Z0-9]+\b", (text or "").lower())
+
+
+    def get_bm25_relevance_scores(self, query: str, papers: list[Paper]) -> list[float]:
+        """Score a batch of papers against the user query with BM25."""
+        if not papers:
+            return []
+
+        corpus = [
+            self._tokenize_bm25(f"{paper.title or ''} {paper.abstract or ''}")
+            for paper in papers
+        ]
+        tokenized_query = self._tokenize_bm25(query)
+
+        if not tokenized_query or not any(corpus):
+            return [0.0] * len(papers)
+
+        bm25 = BM25Okapi(corpus)
+        raw_scores = bm25.get_scores(tokenized_query)
+
+        # Smoke-test normalization: map scores into [0, 1] within this candidate batch.
+        max_score = max(float(score) for score in raw_scores)
+
+        if max_score <= 0:
+            return [0.0] * len(papers)
+
+        return [
+            max(0.0, float(score) / max_score)
+            for score in raw_scores
+        ]
 
     async def get_relevance_score(self, query: str, paper: Paper, **kwargs) -> float:
         prompt = SELECT_PROMPT.format(title=paper.title, abstract=paper.abstract, user_query=query)

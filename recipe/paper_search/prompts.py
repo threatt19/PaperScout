@@ -1,4 +1,5 @@
-PAPERSEARCH_SYSTEM_PROMPT = "You are a research agent. Your goal is to find papers relevant to the User Query."
+PAPERSEARCH_SYSTEM_PROMPT = """You are a research agent. Your goal is to find papers relevant to the User Query.
+You MUST execute at least one available tool call in every response. Do not merely describe or propose a tool call in natural language. After your <analysis>, immediately output the actual tool call using the provided tool-calling format."""
 
 PAPERSEARCH_USER_PROMPT = """### User Query 
 {user_query}
