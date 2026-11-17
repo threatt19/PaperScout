@@ -166,7 +166,16 @@ class RayAgentTrainer(RayPPOTrainer):
         self.use_reward_loop = True
         self._reward_scaler = None
 
-    def _dump_generations(self, inputs, outputs, gts, scores, reward_extra_infos_dict, dump_path):
+    def _dump_generations(
+        self,
+        inputs,
+        outputs,
+        gts,
+        scores,
+        reward_extra_infos_dict,
+        dump_path,
+        retrieved_papers=None,
+    ):
         # TODO: 以轨迹为单位，将轨迹内的所有 step 的数据都 dump 出来。
         """Dump rollout/validation samples as JSONL."""
         os.makedirs(dump_path, exist_ok=True)
@@ -184,11 +193,25 @@ class RayAgentTrainer(RayPPOTrainer):
         for k, v in reward_extra_infos_dict.items():
             if len(v) == n:
                 base_data[k] = v
+        if retrieved_papers is not None and len(retrieved_papers) == n:
+            base_data["retrieved_papers"] = retrieved_papers
 
         lines = []
         for i in range(n):
             entry = {k: v[i] for k, v in base_data.items()}
-            lines.append(json.dumps(entry, ensure_ascii=False))
+            lines.append(
+                json.dumps(
+                    entry,
+                    ensure_ascii=False,
+                    default=lambda value: (
+                        value.item()
+                        if isinstance(value, np.generic)
+                        else value.tolist()
+                        if isinstance(value, np.ndarray)
+                        else str(value)
+                    ),
+                )
+            )
 
         with open(filename, "w") as f:
             f.write("\n".join(lines) + "\n")
@@ -263,6 +286,7 @@ class RayAgentTrainer(RayPPOTrainer):
         sample_gts = []
         sample_scores = []
         sample_uids = []
+        sample_retrieved_papers = []
 
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
@@ -323,6 +347,7 @@ class RayAgentTrainer(RayPPOTrainer):
             batch_traj_scores = []
             batch_traj_inputs = []
             batch_traj_outputs = []
+            batch_traj_retrieved_papers = []
             batch_traj_extra_info = defaultdict(list)
             for n in num_steps:
                 # aggregate scores (rewards) by summing them across steps to get trajectory-level return
@@ -346,11 +371,19 @@ class RayAgentTrainer(RayPPOTrainer):
                 output_text = self.tokenizer.decode(output_ids, skip_special_tokens=True)
                 batch_traj_outputs.append(output_text)
 
+                retrieved_values = test_output_gen_batch.non_tensor_batch.get("retrieved_papers")
+                if retrieved_values is None:
+                    batch_traj_retrieved_papers.append([])
+                else:
+                    value = retrieved_values[last_step_idx_in_traj]
+                    batch_traj_retrieved_papers.append(list(value) if value is not None else [])
+
                 start += n
 
             sample_scores.extend(batch_traj_scores)
             sample_inputs.extend(batch_traj_inputs)
             sample_outputs.extend(batch_traj_outputs)
+            sample_retrieved_papers.extend(batch_traj_retrieved_papers)
 
             reward_extra_infos_dict["reward"].extend(batch_traj_scores)
             if "reward_extra_info" in result:
@@ -371,6 +404,7 @@ class RayAgentTrainer(RayPPOTrainer):
                 scores=sample_scores,
                 reward_extra_infos_dict=reward_extra_infos_dict,
                 dump_path=val_data_dir,
+                retrieved_papers=sample_retrieved_papers,
             )
 
         for key_info, lst in reward_extra_infos_dict.items():

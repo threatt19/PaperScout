@@ -416,7 +416,7 @@ def main():
             seed_work.get("referenced_works") or []
         )
 
-        # Fetch a larger candidate set because many references
+                # Fetch a larger candidate set because many references
         # are not arXiv papers or do not have abstracts.
         candidate_reference_ids = reference_ids[
             :max(args.refs_per_paper * 10, 30)
@@ -429,7 +429,7 @@ def main():
         ref_titles = []
 
         for ref_work in reference_works:
-
+            
             if len(ref_titles) >= args.refs_per_paper:
                 break
 

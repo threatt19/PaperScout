@@ -97,7 +97,7 @@ class PaperSearchAgentFlow(AgentFlowBase):
         self.tool_schemas = PAPERSEARCH_TOOL_SCHEMAS
         self.client = ArXivClient(timeout=30.0)
 
-        self.paper_pool = PaperPool()
+        self.paper_pool = PaperPool(max_size=12, max_abstract_words=150)
         # Protect paper_pool read/write across concurrent search/expand tasks in the same event loop.
         # Keep the critical sections small (in-memory ops only).
         self._paper_pool_lock = threading.RLock()
@@ -106,6 +106,36 @@ class PaperSearchAgentFlow(AgentFlowBase):
         self.steps = []
 
         self.history_actions = []
+        self.search_success_count = 0
+        self.expand_fulltext_success_count = 0
+        self.expand_success_count = 0
+
+    def _action_metrics(self, search_attempts: int, expand_attempts: int) -> dict[str, int]:
+        """Return trajectory-level counters used by validation and JSONL dumps."""
+        with self._paper_pool_lock:
+            paper_pool_size = len(self.paper_pool.papers)
+        return {
+            "search_actions_total": search_attempts,
+            "expand_actions_total": expand_attempts,
+            "search_success_total": self.search_success_count,
+            "expand_fulltext_success_total": self.expand_fulltext_success_count,
+            "expand_success_total": self.expand_success_count,
+            "paper_pool_size": paper_pool_size,
+        }
+
+    def _retrieved_papers(self) -> list[dict[str, Any]]:
+        """Return the complete pool ranked by relevance for retrieval evaluation."""
+        with self._paper_pool_lock:
+            entries = list(reversed(self.paper_pool.ranked_papers))
+            return [
+                {
+                    "arxiv_id": entry.paper.arxiv_id,
+                    "score": float(entry.score),
+                    "source": entry.source,
+                    "expanded": bool(entry.expand),
+                }
+                for entry in entries
+            ]
 
     @staticmethod
     def _normalize_arxiv_id(arxiv_id: str) -> str:
@@ -207,10 +237,11 @@ class PaperSearchAgentFlow(AgentFlowBase):
                         # Put counters into reward_extra_info so they can be extracted into
                         # batch.non_tensor_batch and then show up in reward_extra_infos_dict
                         # (used by dumping/validation aggregation in the trainer).
-                        "reward_extra_info": {
-                            "search_actions_total": total_search_action_count,
-                            "expand_actions_total": total_expand_action_count,
-                        },
+                        "reward_extra_info": self._action_metrics(
+                            total_search_action_count,
+                            total_expand_action_count,
+                        ),
+                        "retrieved_papers": self._retrieved_papers(),
                     },
                 )
                 step = await self._postprocess(step, **kwargs)
@@ -225,16 +256,20 @@ class PaperSearchAgentFlow(AgentFlowBase):
                     tool_args = json.loads(tool_call.arguments)
                     if tool_call.name == "search":
                         query = tool_args.get("query")
-                        if query:
-                            tasks.append(self.search(query, **kwargs))
-                            self.history_actions.append(("search", query))
-                            total_search_action_count += 1
+                        if not isinstance(query, str) or not query.strip():
+                            continue
+                        query = query.strip()
+                        tasks.append(self.search(query, **kwargs))
+                        self.history_actions.append(("search", query))
+                        total_search_action_count += 1
                     elif tool_call.name == "expand":
                         arxiv_id = tool_args.get("arxiv_id")
-                        if arxiv_id:
-                            tasks.append(self.expand(arxiv_id, sampling_params, **kwargs))
-                            self.history_actions.append(("expand", arxiv_id))
-                            total_expand_action_count += 1
+                        if not isinstance(arxiv_id, str) or not arxiv_id.strip():
+                            continue
+                        arxiv_id = arxiv_id.strip()
+                        tasks.append(self.expand(arxiv_id, sampling_params, **kwargs))
+                        self.history_actions.append(("expand", arxiv_id))
+                        total_expand_action_count += 1
                 except Exception as e:
                     print(f"Error in tool call: {e}")
                     continue
@@ -250,10 +285,11 @@ class PaperSearchAgentFlow(AgentFlowBase):
                 response_logprobs=output.log_probs[: self.response_length] if output.log_probs else None,
                 reward_score=reward_score,
                 extra_fields={
-                    "reward_extra_info": {
-                        "search_actions_total": total_search_action_count,
-                        "expand_actions_total": total_expand_action_count,
-                    },
+                    "reward_extra_info": self._action_metrics(
+                        total_search_action_count,
+                        total_expand_action_count,
+                    ),
+                    "retrieved_papers": self._retrieved_papers(),
                 },
             )
             step = await self._postprocess(step, **kwargs)
@@ -312,6 +348,8 @@ class PaperSearchAgentFlow(AgentFlowBase):
         if len(keeped_papers) == 0:
             return 0.0
 
+        self.search_success_count += 1
+
         sorted_scores = sorted(keeped_scores, reverse=True)
         top_k_scores = sorted_scores[: self.reward_top_k]
         if self.use_discrete_reward:
@@ -338,6 +376,8 @@ class PaperSearchAgentFlow(AgentFlowBase):
         if fulltext is None:
             print(f"Fulltext is None for {arxiv_id}")
             return 0.0
+
+        self.expand_fulltext_success_count += 1
 
         # STEP 2: extract reference titles
         ref_titles: list[str] = []
@@ -402,6 +442,8 @@ class PaperSearchAgentFlow(AgentFlowBase):
 
         if len(keeped_papers) == 0:
             return 0.0
+
+        self.expand_success_count += 1
 
         sorted_scores = sorted(keeped_scores, reverse=True)
         top_k_scores = sorted_scores[: self.reward_top_k]

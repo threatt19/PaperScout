@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -8,7 +9,12 @@ from fastapi import FastAPI, HTTPException
 from rank_bm25 import BM25Okapi
 
 
-DATA_PATH = Path(__file__).parent / "papers.jsonl"
+DATA_PATH = Path(
+    os.environ.get(
+        "PAPERSCOUT_PAPERS_PATH",
+        Path(__file__).parent / "papers.jsonl",
+    )
+)
 
 app = FastAPI(title="PaperScout Local Paper Server")
 
